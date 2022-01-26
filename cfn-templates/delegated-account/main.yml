@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: The stack creates the AWS Backup Alarm resources in the Management, Central Backup and Workload accounts.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: AWS Backup Alarms Parameters
+        Parameters:
+          - pS3BucketNameArtifacts
+          - pS3BucketKeyPrefixArtifacts
+          - pWorkloadOUs
+          - pCentralBackupOU
+          - pAWSOrganizationsID
+          - pCentralBackupAccountID
+          - pEventBusName
+          - pSNSTopicName
+          - pSNSSubscriptionEmail
+
+Parameters:
+  pS3BucketNameArtifacts:
+    Type: String
+    Description: The Amazon S3 Bucket name where the artifacts are stored
+  pS3BucketKeyPrefixArtifacts:
+    Type: String
+    Description: The Amazon S3 key prefix where the artifacts are stored
+  pWorkloadOUs:
+    Type: CommaDelimitedList
+    Description: A comma separated list of workload organizational units
+  pCentralBackupOU:
+    Type: String
+    Description: The organizational unit of the Central Backup account
+  pAWSOrganizationsID:
+    Type: String
+    Description: The AWS Organizations ID
+  pCentralBackupAccountID:
+    Type: String
+    Description: The Central Backup account ID to create the SNS topic
+  pEventBusName:
+    Type: String
+    Description: The EventBridge event bus name in the Central Backup account
+  pSNSTopicName:
+    Type: String
+    Description: The SNS Topic name to receive events and send email notifications
+  pSNSSubscriptionEmail:
+    Type: String
+    Description: The SNS subscription email to receive the alarm notifications
+
+Resources:
+  # AWS Backups alarms for Central Backup account
+  rBackupAlarmsCentralAccount:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      CallAs: DELEGATED_ADMIN
+      AutoDeployment:
+        Enabled: true
+        RetainStacksOnAccountRemoval: false
+      Description: The stack creates the AWS Backup alarm resources in the Central Backup account
+      PermissionModel: SERVICE_MANAGED
+      StackSetName: AWS-Backup-Central-Backup-Alarms
+      StackInstancesGroup:
+        - DeploymentTargets:
+            OrganizationalUnitIds:
+              - !Ref pCentralBackupOU
+          Regions:
+            - !Sub ${AWS::Region}
+      Parameters:
+        - ParameterKey: pSNSTopicName
+          ParameterValue: !Ref pSNSTopicName
+        - ParameterKey: pSNSSubscriptionEmail
+          ParameterValue: !Ref pSNSSubscriptionEmail
+        - ParameterKey: pEventBusName
+          ParameterValue: !Ref pEventBusName
+        - ParameterKey: pAWSOrganizationsID
+          ParameterValue: !Ref pAWSOrganizationsID
+      TemplateURL: !Sub https://${pS3BucketNameArtifacts}.s3.${AWS::Region}.${AWS::URLSuffix}/${pS3BucketKeyPrefixArtifacts}/central-backup-account.yml
+
+  # AWS Backups alarms for Workload accounts
+  rBackupAlarmsWorkload:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      CallAs: DELEGATED_ADMIN
+      AutoDeployment:
+        Enabled: true
+        RetainStacksOnAccountRemoval: false
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      Description: The stack creates the AWS Backup alarm resources in the Workload accounts
+      PermissionModel: SERVICE_MANAGED
+      StackSetName: AWS-Backup-Workload-Alarms
+      StackInstancesGroup:
+        - DeploymentTargets:
+            OrganizationalUnitIds: !Ref pWorkloadOUs
+          Regions:
+            - !Sub ${AWS::Region}
+      Parameters:
+        - ParameterKey: pCentralBackupAccountID
+          ParameterValue: !Ref pCentralBackupAccountID
+        - ParameterKey: pEventBusName
+          ParameterValue: !Ref pEventBusName
+      TemplateURL: !Sub https://${pS3BucketNameArtifacts}.s3.${AWS::Region}.${AWS::URLSuffix}/${pS3BucketKeyPrefixArtifacts}/workload-accounts.yml

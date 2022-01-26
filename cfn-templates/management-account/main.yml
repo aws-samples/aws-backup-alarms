@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: The stack creates the AWS Backup Alarm resources for the Management account
+
+Parameters:
+  pAWSBackupRegion:
+    Type: String
+    Description: The region where the AWS EventBridge event bus resides
+  pCentralBackupAccountID:
+    Type: String
+    Description: The Central Backup account ID to create the SNS topic
+  pEventBusName:
+    Type: String
+    Description: The EventBridge event bus name in the Central Backup account
+
+Resources:
+  rBackupPoliciesRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Capture organizations backup policies events
+      Name: AWSOrganizationsrBackupPoliciesEvents
+      EventPattern: |
+        {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "source": [
+            "aws.organizations"
+          ],
+          "detail": {
+            "eventSource": [
+              "organizations.amazonaws.com"
+            ],
+            "eventName": [
+              "UpdatePolicy",
+              "DeletePolicy"
+            ],
+            "responseElements": {
+              "policy": {
+                "policySummary": {
+                  "type": [
+                    "BACKUP_POLICY"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      State: ENABLED
+      Targets:
+        - Arn: !Sub "arn:${AWS::Partition}:events:${pAWSBackupRegion}:${pCentralBackupAccountID}:event-bus/${pEventBusName}"
+          Id: SendToBackupEventBridgeBus
+          RoleArn: !GetAtt rEventBridgeRole.Arn
+
+  rEventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AmazonEventBridgeBackupRole
+      Description: Role for Amazon EventBridge to be used by AWSBackupAlarms
+      AssumeRolePolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "events.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        }
+      Path: /
+
+  rEventBridgeRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AmazonEventBridgeBackupEventBus
+      PolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "events:PutEvents",
+              "Resource": "arn:${AWS::Partition}:events:${pAWSBackupRegion}:${pCentralBackupAccountID}:event-bus/${pEventBusName}"
+            }
+          ]
+        }
+      Roles:
+        - !Ref rEventBridgeRole

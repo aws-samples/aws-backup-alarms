@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "pAWSBackupRegion",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pCentralBackupAccountID",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pEventBusName",
+    "ParameterValue": "<REPLACEME>"
+  }
+]

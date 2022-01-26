@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: The stack creates the AWS Backup Alarm resources for Central Backup account
+
+Parameters:
+  pSNSTopicName:
+    Type: String
+  pSNSSubscriptionEmail:
+    Type: String
+  pEventBusName:
+    Type: String
+  pAWSOrganizationsID:
+    Type: String
+
+Resources:
+  rEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Ref pEventBusName
+
+  rEventBusPolicy:
+    Type: AWS::Events::EventBusPolicy
+    Properties:
+      EventBusName: !Ref pEventBusName
+      StatementId: OrganizationAccess
+      Statement:
+        Effect: Allow
+        Principal: "*"
+        Action: events:PutEvents
+        Resource: !GetAtt rEventBus.Arn
+        Condition:
+          StringEquals:
+            aws:PrincipalOrgID: !Ref pAWSOrganizationsID
+
+  rKMSKeySNS:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: AWS Backup alarms SNS topic
+      EnableKeyRotation: true
+      KeyPolicy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "Enable IAM User Permissions",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            },
+            {
+              "Sid": "Allow access to EventBridge and SNS Services",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "events.amazonaws.com",
+                  "sns.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "kms:Decrypt",
+                "kms:GenerateDataKey*"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+
+  rSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref pSNSTopicName
+      KmsMasterKeyId: !Ref rKMSKeySNS
+      Subscription:
+        - Endpoint: !Ref pSNSSubscriptionEmail
+          Protocol: email
+
+  rSNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref rSNSTopic
+      PolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowCloudWatchEvents",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "events.amazonaws.com"
+              },
+              "Action": "SNS:Publish",
+              "Resource": "${rSNSTopic}"
+            }
+          ]
+        }
+
+  rBackupJobFailuresRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Capture backup jobs failure events
+      Name: AWSBackupJobsFailures
+      EventBusName: !Ref rEventBus
+      EventPattern: |
+        {
+          "detail-type": [
+            "Backup Job State Change"
+          ],
+          "source": [
+            "aws.backup"
+          ],
+          "detail": {
+            "state": [
+              "FAILED"
+            ]
+          }
+        }
+      State: ENABLED
+      Targets:
+        - Arn: !Ref rSNSTopic
+          Id: SendToSNS
+
+  rBackupCopyJobFailuresRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Capture backup copy jobs failure events
+      Name: AWSBackupCopyJobsFailures
+      EventBusName: !Ref rEventBus
+      EventPattern: |
+        {
+          "detail-type": [
+            "Copy Job State Change"
+          ],
+          "source": [
+            "aws.backup"
+          ],
+          "detail": {
+            "state": [
+              "FAILED"
+            ]
+          }
+        }
+      State: ENABLED
+      Targets:
+        - Arn: !Ref rSNSTopic
+          Id: SendToSNS
+
+  rBackupPoliciesRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Capture organizations backup policies events
+      Name: AWSOrganizationsBackupPoliciesEvents
+      EventBusName: !Ref rEventBus
+      EventPattern: |
+        {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "source": [
+            "aws.organizations"
+          ],
+          "detail": {
+            "eventSource": [
+              "organizations.amazonaws.com"
+            ],
+            "eventName": [
+              "UpdatePolicy",
+              "DeletePolicy"
+            ],
+            "responseElements": {
+              "policy": {
+                "policySummary": {
+                  "type": [
+                    "BACKUP_POLICY"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      State: ENABLED
+      Targets:
+        - Arn: !Ref rSNSTopic
+          Id: SendToSNS

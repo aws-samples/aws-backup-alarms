@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: The stack creates the AWS Backup Alarm resources for the Workload accounts
+
+Parameters:
+  pCentralBackupAccountID:
+    Type: String
+  pEventBusName:
+    Type: String
+
+Resources:
+  rBackupJobFailuresRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Capture backup jobs failure events
+      Name: AWSBackupJobsFailures
+      EventPattern: |
+        {
+          "detail-type": [
+            "Backup Job State Change"
+          ],
+          "source": [
+            "aws.backup"
+          ],
+          "detail": {
+            "state": [
+              "FAILED"
+            ]
+          }
+        }
+      Targets:
+        - Arn: !Sub "arn:${AWS::Partition}:events:${AWS::Region}:${pCentralBackupAccountID}:event-bus/${pEventBusName}"
+          Id: SendToBackupEventBridgeBus
+          RoleArn: !GetAtt rEventBridgeRole.Arn
+
+  rBackupCopyJobFailuresRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Capture backup copy jobs failure events
+      Name: AWSBackupCopyJobsFailures
+      EventPattern: |
+        {
+          "detail-type": [
+            "Copy Job State Change"
+          ],
+          "source": [
+            "aws.backup"
+          ],
+          "detail": {
+            "state": [
+              "FAILED"
+            ]
+          }
+        }
+      State: ENABLED
+      Targets:
+        - Arn: !Sub "arn:${AWS::Partition}:events:${AWS::Region}:${pCentralBackupAccountID}:event-bus/${pEventBusName}"
+          Id: SendToBackupEventBridgeBus
+          RoleArn: !GetAtt rEventBridgeRole.Arn
+
+  rEventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AmazonEventBridgeBackupRole
+      Description: Role for Amazon EventBridge to be used by AWSBackupAlarms
+      AssumeRolePolicyDocument: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "events.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        }
+      Path: /
+
+  rEventBridgeRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AmazonEventBridgeBackupEventBus
+      PolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "events:PutEvents",
+              "Resource": "arn:${AWS::Partition}:events:${AWS::Region}:${pCentralBackupAccountID}:event-bus/${pEventBusName}"
+            }
+          ]
+        }
+      Roles:
+        - !Ref rEventBridgeRole

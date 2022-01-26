@@ -1,0 +1,42 @@
+[
+  {
+    "ParameterKey": "pAWSBackupRegion",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pS3BucketNameArtifacts",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pS3BucketKeyPrefixArtifacts",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pWorkloadOUs",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pCentralBackupOU",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pAWSOrganizationsID",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pCentralBackupAccountID",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pEventBusName",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pSNSTopicName",
+    "ParameterValue": "<REPLACEME>"
+  },
+  {
+    "ParameterKey": "pSNSSubscriptionEmail",
+    "ParameterValue": "<REPLACEME>"
+  }
+]
